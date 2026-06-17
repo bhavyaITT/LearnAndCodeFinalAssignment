@@ -43,5 +43,20 @@ namespace PRM.API.Controllers
 
             return Ok(result.Data);
         }
+
+        /// <summary>Team employees with current/future allocations — direct allocation screen.</summary>
+        [HttpGet("team-allocations")]
+        public async Task<IActionResult> TeamAllocations(CancellationToken ct)
+        {
+            var userId = User.GetUserId();
+            if (userId is null) return Unauthorized();
+
+            var managerResult = await resolveEmployeeId.ExecuteAsync(userId.Value, ct);
+            if (!managerResult.IsSuccess)
+                return BadRequest(new { message = managerResult.Error });
+
+            var rows = await getDashboard.ExecuteTeamAllocationsAsync(managerResult.Data, ct);
+            return Ok(rows);
+        }
     }
 }

@@ -139,6 +139,9 @@ public sealed class PrmApiClient(HttpClient http, UserSession session)
     public Task<ApiResult<EmployeeDrillInResponse>> GetEmployeeDrillInAsync(int employeeId, CancellationToken ct = default) =>
         GetAsync<EmployeeDrillInResponse>($"api/manager/dashboard/employees/{employeeId}", ct);
 
+    public Task<ApiResult<List<TeamEmployeeAllocationRow>>> GetTeamEmployeeAllocationsAsync(CancellationToken ct = default) =>
+        GetAsync<List<TeamEmployeeAllocationRow>>("api/manager/dashboard/team-allocations", ct);
+
     // ── Manager: Allocations ────────────────────────────────────
 
     public Task<ApiResult<AllocationValidationResponse>> ValidateAllocationAsync(CreateAllocationRequest body, CancellationToken ct = default) =>

@@ -86,8 +86,47 @@ public static class ConsoleUi
 
     public static bool Confirm(string message)
     {
-        var input = ReadLine($"{message} [Y/N]: ").Trim().ToUpperInvariant();
-        return input is "Y" or "YES";
+        while (true)
+        {
+            var input = ReadLine($"{message} [Y/N]: ").Trim().ToUpperInvariant();
+            if (input == "Y")
+                return true;
+            if (input == "N")
+                return false;
+
+            ShowError("Please enter Y or N only.");
+        }
+    }
+
+    /// <summary>Reads Y or N only — rejects any other input.</summary>
+    public static bool ReadYesOrNo(string prompt = "Choice")
+    {
+        while (true)
+        {
+            var input = ReadLine($"{prompt} [Y/N]: ").Trim().ToUpperInvariant();
+            if (input == "Y")
+                return true;
+            if (input == "N")
+                return false;
+
+            ShowError("Please enter Y or N only.");
+        }
+    }
+
+    /// <summary>Returns null when Enter is pressed to keep the current value.</summary>
+    public static int? ReadOptionalMenuChoice(string prompt, int min, int max)
+    {
+        while (true)
+        {
+            var input = ReadLine(prompt).Trim();
+            if (string.IsNullOrEmpty(input))
+                return null;
+
+            if (int.TryParse(input, out var option) && option >= min && option <= max)
+                return option;
+
+            ShowError($"Please enter a number between {min} and {max}, or press Enter to keep current.");
+        }
     }
 
     public static bool IsIntimetecEmail(string email) =>

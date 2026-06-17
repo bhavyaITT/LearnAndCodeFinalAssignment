@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using PRM.Application.Common;
 using PRM.Application.DTOs.Allocation;
 using PRM.Application.DTOs.Employee;
 using PRM.Application.DTOs.Manager;
@@ -147,12 +148,68 @@ namespace PRM.Infrastructure.ExternalService
                     e.User.FullName,
                     e.User.Department,
                     e.User.Designation,
-                    e.Status == EmployeeStatus.Bench ? "Bench" : "Allocated",
+                    e.Allocations.Any(a => a.FromDate <= today && a.ToDate >= today)
+                        ? "Allocated"
+                        : "Bench",
                     e.Allocations
-                        .Where(a => a.ToDate >= today)
+                        .Where(a => a.FromDate <= today && a.ToDate >= today)
                         .Sum(a => a.UtilisationPercentage)
                 ))
                 .ToListAsync(ct);
+        }
+
+        public async Task<IEnumerable<TeamEmployeeAllocationRow>> GetTeamEmployeeAllocationRowsAsync(
+            int managerEmployeeId, CancellationToken ct = default)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            var team = await context.Employees
+                .Where(e => e.User.IsActive
+                         && e.User.Role == UserRole.Employee
+                         && e.ManagerId == managerEmployeeId
+                         && e.Id != managerEmployeeId)
+                .Include(e => e.User)
+                .Include(e => e.Allocations.Where(a => a.ToDate >= today && a.ToDate >= a.FromDate))
+                    .ThenInclude(a => a.Project)
+                .OrderBy(e => e.User.FullName)
+                .ToListAsync(ct);
+
+            var rows = new List<TeamEmployeeAllocationRow>();
+
+            foreach (var employee in team)
+            {
+                var allocations = employee.Allocations
+                    .Where(a => AllocationDateHelper.IsEndable(a, today))
+                    .OrderBy(a => a.FromDate)
+                    .ToList();
+
+                if (allocations.Count == 0)
+                {
+                    rows.Add(new TeamEmployeeAllocationRow(
+                        employee.Id,
+                        employee.User.FullName,
+                        "-",
+                        0,
+                        today,
+                        today,
+                        false));
+                    continue;
+                }
+
+                foreach (var allocation in allocations)
+                {
+                    rows.Add(new TeamEmployeeAllocationRow(
+                        employee.Id,
+                        employee.User.FullName,
+                        allocation.Project.Name,
+                        allocation.UtilisationPercentage,
+                        allocation.FromDate,
+                        allocation.ToDate,
+                        AllocationDateHelper.IsActiveOnDate(allocation, today)));
+                }
+            }
+
+            return rows;
         }
 
         public async Task<bool> IsEmployeeUnderManagerAsync(
@@ -193,7 +250,9 @@ namespace PRM.Infrastructure.ExternalService
 
             return await context.Allocations
                 .Include(a => a.Project)
-                .Where(a => a.EmployeeId == employeeId && a.ToDate >= today)
+                .Where(a => a.EmployeeId == employeeId
+                         && a.FromDate <= today
+                         && a.ToDate >= today)
                 .OrderBy(a => a.Project.Name)
                 .Select(a => new ActiveAllocationItem(
                     a.Id, a.Project.Name, a.UtilisationPercentage, a.FromDate, a.ToDate
@@ -214,19 +273,18 @@ namespace PRM.Infrastructure.ExternalService
 
         public async Task<ManagerProjectDetailResponse?> GetManagerProjectDetailAsync(int projectId, int managerEmployeeId, CancellationToken ct = default)
         {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
             var project = await context.Projects
                 .Include(p => p.Milestones.OrderBy(m => m.DueDate))
-                .Include(p => p.Allocations.Where(a => a.ToDate >= DateOnly.FromDateTime(DateTime.UtcNow)))
+                .Include(p => p.Allocations.Where(a => a.ToDate >= today && a.ToDate >= a.FromDate))
                     .ThenInclude(a => a.Employee)
                         .ThenInclude(e => e.User)
                 .FirstOrDefaultAsync(p => p.Id == projectId && p.ManagerId == managerEmployeeId, ct);
 
             if (project is null) return null;
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-            // Build risk flags
-            var flags = BuildRiskFlags(project.Milestones, today);
+            var flags = await BuildRiskFlagsAsync(project, today, ct);
 
             var milestones = project.Milestones.Select(m => new MilestoneResponse(
                 m.Id, m.Title, m.DueDate, m.Status.ToString()
@@ -243,17 +301,13 @@ namespace PRM.Infrastructure.ExternalService
             );
         }
 
-        ///// <summary>
-        ///// Derives risk flags from milestone data.
-        ///// The background scheduler sets Health on the Project entity;
-        ///// these flags explain why on the detail screen.
-        ///// </summary>
-        private static IEnumerable<RiskFlagItem> BuildRiskFlags(
-            IEnumerable<Domain.Entities.Milestone> milestones,
-            DateOnly today)
+        private async Task<IEnumerable<RiskFlagItem>> BuildRiskFlagsAsync(
+            Domain.Entities.Project project,
+            DateOnly today,
+            CancellationToken ct)
         {
             var flags = new List<RiskFlagItem>();
-            var milestoneList = milestones.ToList();
+            var milestoneList = project.Milestones.ToList();
 
             var overdue = milestoneList
                 .Where(m => m.Status != MilestoneStatus.Done && m.DueDate < today)
@@ -265,13 +319,50 @@ namespace PRM.Infrastructure.ExternalService
                 flags.Add(new RiskFlagItem(true, $"{m.Title} milestone is {days} day(s) overdue"));
             }
 
+            var lastMonday = ProjectHealthCalculator.GetLastCompletedWeekMonday(today);
+            var lastSunday = lastMonday.AddDays(6);
+
+            var allocatedDuringWeek = await context.Allocations
+                .Include(a => a.Employee)
+                    .ThenInclude(e => e.User)
+                .Where(a => a.ProjectId == project.Id
+                         && a.FromDate <= lastSunday
+                         && a.ToDate >= lastMonday)
+                .Select(a => new { a.EmployeeId, a.Employee.User.FullName })
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var employee in allocatedDuringWeek)
+            {
+                var submitted = await context.Timesheets.AnyAsync(
+                    t => t.EmployeeId == employee.EmployeeId
+                      && t.WeekStartDate == lastMonday
+                      && t.Status == TimesheetStatus.Submitted,
+                    ct);
+
+                if (!submitted)
+                {
+                    flags.Add(new RiskFlagItem(
+                        true,
+                        $"{employee.FullName} did not submit timesheet for week {lastMonday:dd-MMM-yyyy}"));
+                }
+            }
+
+            if (!flags.Any(f => f.IsCritical))
+                flags.Add(new RiskFlagItem(false, "All milestones are on track"));
+
+            if (allocatedDuringWeek.Count > 0
+                && !flags.Any(f => f.IsCritical && f.Message.Contains("timesheet", StringComparison.OrdinalIgnoreCase)))
+            {
+                flags.Add(new RiskFlagItem(
+                    false,
+                    "All allocated employees submitted timesheets for the last completed week"));
+            }
+
             var hasNotStarted = milestoneList.Any(m => m.Status == MilestoneStatus.NotStarted);
             var hasInProgress = milestoneList.Any(m => m.Status == MilestoneStatus.InProgress);
 
-            if (!flags.Any())
-                flags.Add(new RiskFlagItem(false, "All milestones are on track"));
-
-            if (!hasNotStarted && !hasInProgress)
+            if (!hasNotStarted && !hasInProgress && milestoneList.Count > 0)
                 flags.Add(new RiskFlagItem(false, "All milestones completed"));
 
             return flags;
@@ -341,7 +432,7 @@ namespace PRM.Infrastructure.ExternalService
                 entries.Add(new TeamTimesheetEntryResponse(
                     employee.Id, employee.User.FullName,
                     0, hadAllocation ? "-" : "N/A",
-                    0, hadAllocation ? TimesheetStatus.Missed.ToString() : "No allocation"
+                    0, hadAllocation ? TimesheetStatus.Pending.ToString() : "No allocation"
                 ));
             }
 
@@ -381,7 +472,9 @@ namespace PRM.Infrastructure.ExternalService
             return await context.Allocations
                 .Include(a => a.Employee)
                     .ThenInclude(e => e.User)
-                .Where(a => a.ProjectId == projectId && a.ToDate >= today)
+                .Where(a => a.ProjectId == projectId
+                         && a.ToDate >= today
+                         && a.ToDate >= a.FromDate)
                 .OrderBy(a => a.Employee.User.FullName)
                 .Select(a => new AllocationOnProjectResponse(
                     a.Id, a.EmployeeId, a.Employee.User.FullName,

@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using PRM.Application.Common;
 using PRM.Domain.Enums;
 using PRM.Infrastructure.Persistence;
 using System;
@@ -29,6 +30,20 @@ namespace PRM.Infrastructure.BackgroundJobs
             logger.LogInformation("Starting utilisation recompute job at {Time}", DateTime.UtcNow);
 
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            var invalidAllocations = await context.Allocations
+                .Where(a => a.ToDate < a.FromDate)
+                .ToListAsync();
+
+            if (invalidAllocations.Count > 0)
+            {
+                context.Allocations.RemoveRange(invalidAllocations);
+                await context.SaveChangesAsync();
+                logger.LogInformation(
+                    "Removed {Count} invalid allocation(s) where ToDate was before FromDate",
+                    invalidAllocations.Count);
+            }
+
             var employees = await context.Employees
                 .Where(e => e.User.IsActive)
                 .Include(e => e.Allocations)
@@ -39,7 +54,7 @@ namespace PRM.Infrastructure.BackgroundJobs
             foreach (var employee in employees)
             {
                 var hasActiveAllocation = employee.Allocations
-                    .Any(a => a.FromDate <= today && a.ToDate >= today);
+                    .Any(a => AllocationDateHelper.IsActiveOnDate(a, today));
 
                 var correctStatus = hasActiveAllocation
                     ? EmployeeStatus.Allocated

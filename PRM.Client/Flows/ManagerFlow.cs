@@ -203,6 +203,29 @@ public sealed class ManagerFlow(PrmApiClient api, UserSession session)
         var projectId = await SelectProjectAsync(ct);
         if (projectId is null) return;
 
+        var teamAlloc = await api.GetTeamEmployeeAllocationsAsync(ct);
+        if (teamAlloc.IsSuccess && teamAlloc.Data!.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Your team — current allocations:");
+            Console.WriteLine($"{"Emp ID",-7} {"Name",-14} {"Project",-14} {"%",-5} {"From",-12} {"To",-12} {"Today"}");
+            ConsoleUi.WriteDivider();
+
+            foreach (var row in teamAlloc.Data)
+            {
+                var projectName = row.ProjectName == "-" ? "(bench)" : row.ProjectName;
+                var from = row.ProjectName == "-" ? "-" : ConsoleUi.FormatDate(row.FromDate);
+                var to = row.ProjectName == "-" ? "-" : ConsoleUi.FormatDate(row.ToDate);
+                var pct = row.ProjectName == "-" ? "-" : $"{row.UtilisationPercent}%";
+                var todayFlag = row.IsActiveToday ? "Yes" : "No";
+
+                Console.WriteLine($"{row.EmployeeId,-7} {row.EmployeeName,-14} {projectName,-14} {pct,-5} {from,-12} {to,-12} {todayFlag}");
+            }
+
+            ConsoleUi.WriteDivider();
+            Console.WriteLine();
+        }
+
         var empIdText = ConsoleUi.ReadRequired("Enter Employee ID : ");
         if (!int.TryParse(empIdText, out var employeeId)) { ConsoleUi.ShowError("Invalid ID."); ConsoleUi.Pause(); return; }
 
@@ -294,7 +317,17 @@ public sealed class ManagerFlow(PrmApiClient api, UserSession session)
         else
         {
             var e = end.Data!;
-            ConsoleUi.ShowSuccess($"Allocation ended. {e.EmployeeName} freed from {e.ProjectName} as of {ConsoleUi.FormatDate(e.EndedOnDate)}.");
+            if (e.WasRemoved)
+            {
+                ConsoleUi.ShowSuccess(
+                    $"Future allocation cancelled. {e.EmployeeName} removed from {e.ProjectName} before it started.");
+            }
+            else
+            {
+                ConsoleUi.ShowSuccess(
+                    $"Allocation ended. {e.EmployeeName} freed from {e.ProjectName} as of {ConsoleUi.FormatDate(e.EndedOnDate)}.");
+            }
+
             Console.WriteLine($"Employee status updated to {e.EmployeeNewStatus.ToUpperInvariant()}.");
             ConsoleUi.Pause();
         }
@@ -343,10 +376,11 @@ public sealed class ManagerFlow(PrmApiClient api, UserSession session)
             Console.WriteLine("Milestones:");
             Console.WriteLine($"  {"#",-4} {"Title",-18} {"Due Date",-12} {"Status"}");
             var milestones = p.Milestones.ToList();
+            var today = DateOnly.FromDateTime(DateTime.Today);
             for (var i = 0; i < milestones.Count; i++)
             {
                 var m = milestones[i];
-                var overdue = m.Status.Equals("InProgress", StringComparison.OrdinalIgnoreCase) && m.DueDate < DateOnly.FromDateTime(DateTime.Today);
+                var overdue = !m.Status.Equals("Done", StringComparison.OrdinalIgnoreCase) && m.DueDate < today;
                 Console.WriteLine($"  {i + 1}.  {m.Title,-16} {ConsoleUi.FormatDate(m.DueDate),-12} {m.Status}{(overdue ? "  OVERDUE" : "")}");
             }
 

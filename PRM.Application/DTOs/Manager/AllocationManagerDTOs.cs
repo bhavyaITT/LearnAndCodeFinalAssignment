@@ -45,7 +45,20 @@ namespace PRM.Application.DTOs.Manager
         string ProjectName,
         DateOnly EndedOnDate,
         /// <summary>Status after ending — Bench if no other active allocations.</summary>
-        string EmployeeNewStatus
+        string EmployeeNewStatus,
+        /// <summary>True when a future allocation was cancelled (removed) rather than ended early.</summary>
+        bool WasRemoved
+    );
+
+    /// <summary>One row per employee allocation for direct-allocation team listing.</summary>
+    public record TeamEmployeeAllocationRow(
+        int EmployeeId,
+        string EmployeeName,
+        string ProjectName,
+        int UtilisationPercent,
+        DateOnly FromDate,
+        DateOnly ToDate,
+        bool IsActiveToday
     );
 
     /// <summary>Summary of one allocation for the End Allocation screen.</summary>

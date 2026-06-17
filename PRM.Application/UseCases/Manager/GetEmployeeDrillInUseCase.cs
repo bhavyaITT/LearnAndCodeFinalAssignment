@@ -20,13 +20,14 @@ namespace PRM.Application.UseCases.Manager
             var allocations = (await queryService.GetActiveAllocationsForEmployeeAsync(employeeId, ct)).ToList();
             var totalUtil = allocations.Sum(a => a.UtilisationPercent);
             var recentTags = await queryService.GetRecentActivityTagsAsync(employeeId, RecentWeeksCount, ct);
+            var computedStatus = totalUtil > 0 ? "Allocated" : "Bench";
 
             return Result<EmployeeDrillInResponse>.Success(new EmployeeDrillInResponse(
                 Id: detail.Id,
                 FullName: detail.FullName,
                 Department: detail.Department,
                 Designation: detail.Designation,
-                Status: detail.Status,
+                Status: computedStatus,
                 TotalUtilisationPercent: totalUtil,
                 ProfileSkills: detail.Skills.Select(s => s.SkillName),
                 ActiveAllocations: allocations,

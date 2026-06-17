@@ -191,15 +191,17 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
         Console.WriteLine($"Department ({current}):");
         Console.WriteLine("  (1) Development  (2) HR  (3) Management");
         Console.WriteLine("  (4) Administration  (5) Testing  (6) SDET  (Enter) keep current");
-        var choice = ConsoleUi.ReadLine("Enter choice: ").Trim();
+
+        var choice = ConsoleUi.ReadOptionalMenuChoice("Enter choice: ", 1, 6);
         return choice switch
         {
-            "1" => "Development",
-            "2" => "HR",
-            "3" => "Management",
-            "4" => "Administration",
-            "5" => "Testing",
-            "6" => "SDET",
+            null => null,
+            1 => "Development",
+            2 => "HR",
+            3 => "Management",
+            4 => "Administration",
+            5 => "Testing",
+            6 => "SDET",
             _ => null
         };
     }
@@ -208,14 +210,112 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
     {
         Console.WriteLine($"Designation ({current}):");
         Console.WriteLine("  (1) SE  (2) Manager  (3) Admin  (Enter) keep current");
-        var choice = ConsoleUi.ReadLine("Enter choice: ").Trim();
+
+        var choice = ConsoleUi.ReadOptionalMenuChoice("Enter choice: ", 1, 3);
         return choice switch
         {
-            "1" => "SE",
-            "2" => "Manager",
-            "3" => "Admin",
+            null => null,
+            1 => "SE",
+            2 => "Manager",
+            3 => "Admin",
             _ => null
         };
+    }
+
+    private static void PrintManageableEmployeesTable(IEnumerable<EmployeeSummaryResponse> employees)
+    {
+        Console.WriteLine($"{"ID",-5} {"Name",-16} {"Role",-10} {"Department",-12} {"Status"}");
+        ConsoleUi.WriteDivider();
+
+        foreach (var e in employees.OrderBy(e => e.Id))
+            Console.WriteLine($"{e.Id,-5} {e.FullName,-16} {e.Role,-10} {e.Department,-12} {e.Status.ToUpperInvariant()}");
+
+        ConsoleUi.WriteDivider();
+    }
+
+    private async Task<int?> PromptManageableEmployeeIdAsync(CancellationToken ct, string idPrompt = "Enter Employee ID: ")
+    {
+        var result = await api.GetEmployeesAsync(ct);
+        if (!result.IsSuccess)
+        {
+            ConsoleUi.ShowApiError(result.Error);
+            return null;
+        }
+
+        var manageable = result.Data!.Employees
+            .Where(e => IsManageableRole(e.Role))
+            .ToList();
+
+        if (manageable.Count == 0)
+        {
+            ConsoleUi.ShowError("No employees or managers found.");
+            ConsoleUi.Pause();
+            return null;
+        }
+
+        PrintManageableEmployeesTable(manageable);
+        Console.WriteLine();
+
+        var idText = ConsoleUi.ReadRequired(idPrompt);
+        if (!int.TryParse(idText, out var id))
+        {
+            ConsoleUi.ShowError("Invalid ID.");
+            ConsoleUi.Pause();
+            return null;
+        }
+
+        if (manageable.All(e => e.Id != id))
+        {
+            ConsoleUi.ShowError("Employee ID not found in the list above.");
+            ConsoleUi.Pause();
+            return null;
+        }
+
+        return id;
+    }
+
+    private async Task<int?> PromptProjectIdAsync(CancellationToken ct, string idPrompt = "Enter Project ID: ")
+    {
+        var result = await api.GetProjectsAsync(ct);
+        if (!result.IsSuccess)
+        {
+            ConsoleUi.ShowApiError(result.Error);
+            return null;
+        }
+
+        var projects = result.Data!.Projects.OrderBy(p => p.Id).ToList();
+        if (projects.Count == 0)
+        {
+            ConsoleUi.ShowError("No projects found.");
+            ConsoleUi.Pause();
+            return null;
+        }
+
+        Console.WriteLine($"{"ID",-5} {"Name",-18} {"Manager",-14} {"End Date",-12} {"Status",-10} {"Health"}");
+        ConsoleUi.WriteDivider();
+
+        foreach (var p in projects)
+            Console.WriteLine($"{p.Id,-5} {p.Name,-18} {p.ManagerName,-14} {ConsoleUi.FormatDate(p.EndDate),-12} {p.Status,-10} {ConsoleUi.HealthWithEmoji(p.Health)}");
+
+        ConsoleUi.WriteDivider();
+        Console.WriteLine();
+
+        var idText = ConsoleUi.ReadRequired(idPrompt);
+        if (!int.TryParse(idText, out var id))
+        {
+            ConsoleUi.ShowError("Invalid ID.");
+            ConsoleUi.Pause();
+            return null;
+        }
+
+        if (projects.All(p => p.Id != id))
+        {
+            ConsoleUi.ShowError("Project ID not found in the list above.");
+            ConsoleUi.Pause();
+            return null;
+        }
+
+        return id;
     }
 
     private static bool IsManageableRole(string role) =>
@@ -226,10 +326,11 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
     {
         ConsoleUi.ClearScreen();
         ConsoleUi.WriteHeader("UPDATE EMPLOYEE");
-        var idText = ConsoleUi.ReadRequired("Enter Employee ID: ");
-        if (!int.TryParse(idText, out var id)) { ConsoleUi.ShowError("Invalid ID."); ConsoleUi.Pause(); return; }
 
-        var existing = await api.GetEmployeeAsync(id, ct);
+        var id = await PromptManageableEmployeeIdAsync(ct);
+        if (id is null) return;
+
+        var existing = await api.GetEmployeeAsync(id.Value, ct);
         if (!existing.IsSuccess) { ConsoleUi.ShowApiError(existing.Error); return; }
 
         var emp = existing.Data!;
@@ -257,7 +358,7 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
             departmentPick ?? emp.Department,
             designationPick ?? emp.Designation);
 
-        var result = await api.UpdateEmployeeAsync(id, request, ct);
+        var result = await api.UpdateEmployeeAsync(id.Value, request, ct);
         if (!result.IsSuccess) ConsoleUi.ShowApiError(result.Error);
         else { ConsoleUi.ShowSuccess("Employee updated."); ConsoleUi.Pause(); }
     }
@@ -266,10 +367,11 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
     {
         ConsoleUi.ClearScreen();
         ConsoleUi.WriteHeader("DEACTIVATE EMPLOYEE");
-        var idText = ConsoleUi.ReadRequired("Enter Employee ID: ");
-        if (!int.TryParse(idText, out var id)) { ConsoleUi.ShowError("Invalid ID."); ConsoleUi.Pause(); return; }
 
-        var empResult = await api.GetEmployeeAsync(id, ct);
+        var id = await PromptManageableEmployeeIdAsync(ct);
+        if (id is null) return;
+
+        var empResult = await api.GetEmployeeAsync(id.Value, ct);
         if (!empResult.IsSuccess) { ConsoleUi.ShowApiError(empResult.Error); return; }
         var emp = empResult.Data!;
 
@@ -315,7 +417,7 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
         Console.WriteLine("[Y] Yes, Deactivate     [B] Cancel");
         if (!ConsoleUi.ReadYesOrBack(out var confirm) || !confirm) return;
 
-        var result = await api.DeactivateEmployeeAsync(id, ct);
+        var result = await api.DeactivateEmployeeAsync(id.Value, ct);
         if (!result.IsSuccess) ConsoleUi.ShowApiError(result.Error);
         else { ConsoleUi.ShowSuccess("Employee deactivated."); ConsoleUi.Pause(); }
     }
@@ -362,7 +464,8 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
                 case 3:
                     if (skills.Count == 0) { ConsoleUi.ShowError("No skills to remove."); ConsoleUi.Pause(); break; }
                     var remIdx = ConsoleUi.ReadMenuOption("Enter skill #: ", 1, skills.Count) - 1;
-                    if (ConsoleUi.Confirm($"Remove {skills[remIdx].SkillName}?"))
+                    Console.WriteLine();
+                    if (ConsoleUi.ReadYesOrNo($"Remove {skills[remIdx].SkillName}?"))
                     {
                         var rem = await api.RemoveSkillAsync(skills[remIdx].Id, ct);
                         if (!rem.IsSuccess) ConsoleUi.ShowApiError(rem.Error);
@@ -405,42 +508,84 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
     {
         ConsoleUi.ClearScreen();
         ConsoleUi.WriteHeader("ASSIGN MANAGER");
-        var empIdText = ConsoleUi.ReadRequired("Employee User ID : ");
-        var mgrIdText = ConsoleUi.ReadRequired("Manager User ID  : ");
-        if (!int.TryParse(empIdText, out var empId) || !int.TryParse(mgrIdText, out var mgrId))
+
+        var employeesResult = await api.GetEmployeesAsync(ct);
+        if (!employeesResult.IsSuccess) { ConsoleUi.ShowApiError(employeesResult.Error); return; }
+
+        var all = employeesResult.Data!.Employees.ToList();
+        var eligibleEmployees = all
+            .Where(e => e.Role.Equals("Employee", StringComparison.OrdinalIgnoreCase) && e.IsActive)
+            .OrderBy(e => e.Id)
+            .ToList();
+
+        if (eligibleEmployees.Count == 0)
         {
-            ConsoleUi.ShowError("Invalid ID."); ConsoleUi.Pause(); return;
+            ConsoleUi.ShowError("No active employees available for manager assignment.");
+            ConsoleUi.Pause();
+            return;
         }
 
-        var employees = await api.GetEmployeesAsync(ct);
-        if (!employees.IsSuccess) { ConsoleUi.ShowApiError(employees.Error); return; }
+        Console.WriteLine("Active Employees (Employee role only):");
+        Console.WriteLine($"{"ID",-5} {"Name",-20} {"Department",-14} {"Status"}");
+        ConsoleUi.WriteDivider();
 
-        var employee = employees.Data!.Employees.FirstOrDefault(e => e.Id == empId);
+        foreach (var e in eligibleEmployees)
+            Console.WriteLine($"{e.Id,-5} {e.FullName,-20} {e.Department,-14} {e.Status.ToUpperInvariant()}");
+
+        ConsoleUi.WriteDivider();
+        Console.WriteLine();
+
+        var empIdText = ConsoleUi.ReadRequired("Employee ID : ");
+        if (!int.TryParse(empIdText, out var empId))
+        {
+            ConsoleUi.ShowError("Invalid ID.");
+            ConsoleUi.Pause();
+            return;
+        }
+
+        var employee = eligibleEmployees.FirstOrDefault(e => e.Id == empId);
         if (employee is null)
         {
-            ConsoleUi.ShowError("Employee not found.");
+            ConsoleUi.ShowError("Only active employees with the Employee role can be assigned a manager.");
             ConsoleUi.Pause();
             return;
         }
 
-        if (!employee.Role.Equals("Employee", StringComparison.OrdinalIgnoreCase))
+        var managers = all
+            .Where(e => e.Role.Equals("Manager", StringComparison.OrdinalIgnoreCase) && e.IsActive)
+            .OrderBy(e => e.Id)
+            .ToList();
+
+        if (managers.Count == 0)
         {
-            ConsoleUi.ShowError("A manager can only be assigned to a user with the Employee role.");
+            ConsoleUi.ShowError("No active managers found.");
             ConsoleUi.Pause();
             return;
         }
 
-        var manager = employees.Data.Employees.FirstOrDefault(e => e.Id == mgrId);
+        Console.WriteLine();
+        Console.WriteLine("Active Managers:");
+        Console.WriteLine($"{"ID",-5} {"Name",-20} {"Department"}");
+        ConsoleUi.WriteDivider();
+
+        foreach (var m in managers)
+            Console.WriteLine($"{m.Id,-5} {m.FullName,-20} {m.Department}");
+
+        ConsoleUi.WriteDivider();
+        Console.WriteLine();
+
+        var mgrIdText = ConsoleUi.ReadRequired("Manager ID  : ");
+        if (!int.TryParse(mgrIdText, out var mgrId))
+        {
+            ConsoleUi.ShowError("Invalid ID.");
+            ConsoleUi.Pause();
+            return;
+        }
+
+        var manager = managers.FirstOrDefault(e => e.Id == mgrId);
         if (manager is null)
         {
-            ConsoleUi.ShowError("Manager not found.");
-            ConsoleUi.Pause();
-            return;
-        }
-
-        if (!manager.Role.Equals("Manager", StringComparison.OrdinalIgnoreCase))
-        {
-            ConsoleUi.ShowError("The selected manager must have the Manager role.");
+            ConsoleUi.ShowError("Manager not found or inactive.");
             ConsoleUi.Pause();
             return;
         }
@@ -533,10 +678,11 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
     {
         ConsoleUi.ClearScreen();
         ConsoleUi.WriteHeader("UPDATE PROJECT DETAILS");
-        var idText = ConsoleUi.ReadRequired("Enter Project ID: ");
-        if (!int.TryParse(idText, out var id)) { ConsoleUi.ShowError("Invalid ID."); ConsoleUi.Pause(); return; }
 
-        var existing = await api.GetProjectAsync(id, ct);
+        var id = await PromptProjectIdAsync(ct);
+        if (id is null) return;
+
+        var existing = await api.GetProjectAsync(id.Value, ct);
         if (!existing.IsSuccess) { ConsoleUi.ShowApiError(existing.Error); return; }
         var p = existing.Data!;
 
@@ -602,7 +748,7 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
             string.IsNullOrWhiteSpace(description) ? p.Description : description,
             startDate, endDate, status, managerId);
 
-        var result = await api.UpdateProjectAsync(id, request, ct);
+        var result = await api.UpdateProjectAsync(id.Value, request, ct);
         if (!result.IsSuccess) ConsoleUi.ShowApiError(result.Error);
         else { ConsoleUi.ShowSuccess("Project updated."); ConsoleUi.Pause(); }
     }
@@ -611,12 +757,13 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
     {
         ConsoleUi.ClearScreen();
         ConsoleUi.WriteHeader("MILESTONES");
-        var idText = ConsoleUi.ReadRequired("Enter Project ID: ");
-        if (!int.TryParse(idText, out var projectId)) { ConsoleUi.ShowError("Invalid ID."); ConsoleUi.Pause(); return; }
+
+        var projectId = await PromptProjectIdAsync(ct);
+        if (projectId is null) return;
 
         while (true)
         {
-            var project = await api.GetProjectAsync(projectId, ct);
+            var project = await api.GetProjectAsync(projectId.Value, ct);
             if (!project.IsSuccess) { ConsoleUi.ShowApiError(project.Error); return; }
             var p = project.Data!;
             var milestones = p.Milestones.ToList();
@@ -644,7 +791,7 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
                 case 1:
                     var title = ConsoleUi.ReadRequired("Milestone Title  : ");
                     var due = ConsoleUi.ReadDateRequired("Due Date (DD-MM-YYYY): ");
-                    var add = await api.AddMilestoneAsync(projectId, new AddMilestoneRequest(title, due), ct);
+                    var add = await api.AddMilestoneAsync(projectId.Value, new AddMilestoneRequest(title, due), ct);
                     if (!add.IsSuccess) ConsoleUi.ShowApiError(add.Error);
                     else { ConsoleUi.ShowSuccess("Milestone added."); ConsoleUi.Pause(); }
                     break;
@@ -689,11 +836,11 @@ public sealed class AdminFlow(PrmApiClient api, UserSession session)
 
             ConsoleUi.ClearScreen();
             ConsoleUi.WriteHeader("ALL ALLOCATIONS");
-            Console.WriteLine($"{"Employee",-18} {"Project",-18} {"%",-6} {"From",-12} {"To"}");
+            Console.WriteLine($"{"Emp ID",-7} {"Employee",-16} {"Project",-18} {"%",-6} {"From",-12} {"To"}");
             ConsoleUi.WriteDivider();
 
             foreach (var a in result.Data!.Allocations)
-                Console.WriteLine($"{a.EmployeeName,-18} {a.ProjectName,-18} {a.UtilisationPercentage,4}%  {ConsoleUi.FormatDate(a.FromDate),-12} {ConsoleUi.FormatDate(a.ToDate)}");
+                Console.WriteLine($"{a.EmployeeId,-7} {a.EmployeeName,-16} {a.ProjectName,-18} {a.UtilisationPercentage,4}%  {ConsoleUi.FormatDate(a.FromDate),-12} {ConsoleUi.FormatDate(a.ToDate)}");
 
             ConsoleUi.WriteDivider();
             Console.WriteLine($"Total Active Allocations: {result.Data.TotalActiveCount}");

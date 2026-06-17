@@ -1,6 +1,5 @@
 ﻿using PRM.Application.DTOs.Manager;
 using PRM.Application.Interfaces.Service;
-using PRM.Domain.Enums;
 
 namespace PRM.Application.UseCases.Manager
 {
@@ -12,12 +11,12 @@ namespace PRM.Application.UseCases.Manager
             var team = (await queryService.GetTeamEmployeesForDashboardAsync(managerEmployeeId, ct)).ToList();
 
             var bench = team
-                .Where(e => e.Status == EmployeeStatus.Bench.ToString())
+                .Where(e => e.TotalUtilisationPercent == 0)
                 .OrderBy(e => e.FullName)
                 .ToList();
 
             var active = team
-                .Where(e => e.Status == EmployeeStatus.Allocated.ToString())
+                .Where(e => e.TotalUtilisationPercent > 0)
                 .OrderByDescending(e => e.TotalUtilisationPercent)
                 .ToList();
 
@@ -52,5 +51,9 @@ namespace PRM.Application.UseCases.Manager
                 PartialCount: active.Count(e => e.TotalUtilisationPercent < 100)
             ));
         }
+
+        public async Task<IEnumerable<TeamEmployeeAllocationRow>> ExecuteTeamAllocationsAsync(
+            int managerEmployeeId, CancellationToken ct = default) =>
+            await queryService.GetTeamEmployeeAllocationRowsAsync(managerEmployeeId, ct);
     }
 }

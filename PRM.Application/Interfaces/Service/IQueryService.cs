@@ -32,6 +32,10 @@ namespace PRM.Application.Interfaces.Service
         Task<IEnumerable<TeamEmployeeDashboardRow>> GetTeamEmployeesForDashboardAsync(
             int managerEmployeeId, CancellationToken ct = default);
 
+        /// <summary>All current/future allocations for a manager's team — direct allocation screen.</summary>
+        Task<IEnumerable<TeamEmployeeAllocationRow>> GetTeamEmployeeAllocationRowsAsync(
+            int managerEmployeeId, CancellationToken ct = default);
+
         Task<bool> IsEmployeeUnderManagerAsync(
             int employeeId, int managerEmployeeId, CancellationToken ct = default);
 
