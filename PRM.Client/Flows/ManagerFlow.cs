@@ -176,14 +176,10 @@ public sealed class ManagerFlow(PrmApiClient api, UserSession session)
 
         ConsoleUi.WriteDivider();
         Console.WriteLine("AI-MATCHED RESULTS");
+        if (!string.IsNullOrWhiteSpace(match.Data!.RequirementText))
+            Console.WriteLine($"(for: \"{match.Data.RequirementText}\")");
         ConsoleUi.WriteDivider();
-        Console.WriteLine($"{"#",-3} {"Name",-14} {"Free %",-8} {"Reason"}");
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            var c = candidates[i];
-            var reason = c.AiReason.Length > 40 ? c.AiReason[..40] + "..." : c.AiReason;
-            Console.WriteLine($"{i + 1,-3} {c.FullName,-14} {c.FreeCapacityPercent,4}%  {reason}");
-        }
+        PrintSkillMatchCandidates(candidates);
 
         Console.WriteLine();
         Console.WriteLine("Note: Suggestions are AI-generated. Verify before confirming.");
@@ -538,19 +534,10 @@ public sealed class ManagerFlow(PrmApiClient api, UserSession session)
         var candidates = result.Data!.Candidates.ToList();
         Console.WriteLine();
         Console.WriteLine("Results:");
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            var c = candidates[i];
-            Console.WriteLine($"  {i + 1}.  {c.FullName}");
-            Console.WriteLine($"      Reason: {c.AiReason}");
-            if (c.SuggestedAllocationPercent.HasValue)
-                Console.WriteLine($"      Suggested allocation: {c.SuggestedAllocationPercent}%");
-            Console.WriteLine();
-        }
+        PrintSkillMatchCandidates(candidates);
 
         Console.WriteLine("  Note: These are AI-generated suggestions. Always verify availability");
         Console.WriteLine("  and skills with the employee before allocating.");
-        Console.WriteLine();
         Console.WriteLine("[A] Go to Allocate Resource     [B] Back");
 
         var action = ConsoleUi.ReadLine("Choice: ").ToUpperInvariant();
@@ -660,5 +647,22 @@ public sealed class ManagerFlow(PrmApiClient api, UserSession session)
 
         var choice = ConsoleUi.ReadMenuOption("Enter project number: ", 1, list.Count);
         await ShowRiskSummaryAsync(list[choice - 1].Id, ct);
+    }
+
+    private static void PrintSkillMatchCandidates(IReadOnlyList<SkillMatchCandidateResponse> candidates)
+    {
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var c = candidates[i];
+            Console.WriteLine($"{i + 1}.  {c.FullName,-16} {c.FreeHoursPerWeek,2} hrs free/week");
+            Console.WriteLine($"    \"{c.AiReason}\"");
+            if (c.SuggestedAllocationPercent.HasValue)
+            {
+                Console.WriteLine(
+                    $"    Suggested allocation: {c.SuggestedAllocationPercent}%  " +
+                    $"(≈ {c.SuggestedAllocationPercent * c.FreeHoursPerWeek / Math.Max(c.FreeCapacityPercent, 1)} hrs/week)");
+            }
+            Console.WriteLine();
+        }
     }
 }

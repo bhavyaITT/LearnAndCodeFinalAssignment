@@ -23,23 +23,32 @@ public static class TeamSkillMatchPromptBuilder
         {
           "matches": [
             {
-              "roleTitle": "<inferred role title>",
-              "employeeId": <integer from BENCH list>,
-              "reason": "<why this bench employee fits>"
+              "roleTitle": "QA Engineer",
+              "employeeId": 6,
+              "reason": "Yugansh has Testing skills and is on bench."
             }
           ],
           "gaps": [
             {
-              "roleTitle": "<inferred role title>",
-              "gapType": "SkillGap" | "AvailabilityGap",
-              "reason": "<clear explanation>",
-              "allocatedEmployeeId": <integer from ALLOCATED list or null>,
-              "allocatedEmployeeName": "<name or null>"
+              "roleTitle": "Java Developer",
+              "gapType": "AvailabilityGap",
+              "reason": "Hari has Java skills but is already allocated on another project.",
+              "allocatedEmployeeId": 4,
+              "allocatedEmployeeName": "Hari"
+            },
+            {
+              "roleTitle": "Scrum Master",
+              "gapType": "SkillGap",
+              "reason": "No bench or allocated employee has scrum master skills.",
+              "allocatedEmployeeId": null,
+              "allocatedEmployeeName": null
             }
           ]
         }
 
         Rules:
+        - gapType must be exactly "SkillGap" or "AvailabilityGap" (one value only, never both)
+        - employeeId and allocatedEmployeeId must be JSON numbers, not strings
         - Assign at most ONE bench employee per role in matches
         - NEVER assign the same employeeId to more than one role
         - Only use employeeId values from the BENCH list in matches

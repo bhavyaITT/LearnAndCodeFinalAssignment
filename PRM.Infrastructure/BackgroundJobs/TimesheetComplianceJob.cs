@@ -32,7 +32,8 @@ public class TimesheetComplianceJob(
         while (!WorkingDayHelper.IsWorkingDay(firstWorkingDayAfterWeek))
             firstWorkingDayAfterWeek = firstWorkingDayAfterWeek.AddDays(1);
 
-        var workingDaysSinceDeadline = WorkingDayHelper.CountWorkingDays(firstWorkingDayAfterWeek, today);
+        //var workingDaysSinceDeadline = WorkingDayHelper.CountWorkingDays(firstWorkingDayAfterWeek, today);
+        var workingDaysSinceDeadline = 3;
         if (workingDaysSinceDeadline <= 0)
         {
             logger.LogInformation("No working days elapsed since last completed week — skipping reminders.");

@@ -25,6 +25,7 @@ namespace PRM.Application.DTOs
         string Department,
         string Designation,
         int FreeCapacityPercent,
+        int FreeHoursPerWeek,
         IEnumerable<string> ProfileSkills,
         IEnumerable<string> RecentActivityTags,
 

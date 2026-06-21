@@ -12,7 +12,7 @@ namespace PRM.Application.UseCases.AI
 {
     /// <summary>
     /// Skill Match flow (per BRD):
-    /// 1. Load all active employees with skills, allocations, and recent activity tags
+    /// 1. Load manager's team employees with skills, allocations, and recent activity tags
     /// 2. Filter out fully booked employees (100% utilisation) — they are excluded before any AI call
     /// 3. Parse the manager's requirement for an hours/week hint (part-time vs full-time)
     /// 4. Build structured prompt from remaining candidates
@@ -24,22 +24,24 @@ namespace PRM.Application.UseCases.AI
         private const int MinFreePercentForFullTime = 25;   // < 25% free → skip for full-time requests
 
         public async Task<Result<SkillMatchResponse>> ExecuteAsync(
-            SkillMatchRequest request, CancellationToken ct = default)
+            SkillMatchRequest request,
+            int managerEmployeeId,
+            CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(request.RequirementText))
                 return Result<SkillMatchResponse>.Failure("Requirement text cannot be empty.");
 
-            // ── Step 1: Load all employees with AI context ────────
-            var allEmployees = (await queryService.GetEmployeesForSkillMatchAsync(ct)).ToList();
+            // ── Step 1: Load manager's team with AI context ───────
+            var teamEmployees = (await queryService.GetEmployeesForSkillMatchAsync(managerEmployeeId, ct)).ToList();
 
             // ── Step 2: Filter based on availability ─────────────
             var partTimeHours = ParsePartTimeHours(request.RequirementText);
-            var candidates = FilterCandidates(allEmployees, partTimeHours).ToList();
+            var candidates = FilterCandidates(teamEmployees, partTimeHours).ToList();
 
             if (!candidates.Any())
                 return Result<SkillMatchResponse>.Failure(
-                    "No employees currently have enough free capacity for this requirement. " +
-                    "All active employees are fully booked.");
+                    "No employees on your team currently have enough free capacity for this requirement. " +
+                    "All team members are fully booked.");
 
             // ── Step 3: Build prompt and call AI ──────────────────
             ILlmClient llmClient;
@@ -85,6 +87,7 @@ namespace PRM.Application.UseCases.AI
                         emp.Department,
                         emp.Designation,
                         emp.FreeCapacityPercent,
+                        emp.FreeHoursPerWeek,
                         emp.ProfileSkills,
                         emp.RecentActivityTags,
                         AiReason: r.Reason,
@@ -121,16 +124,16 @@ namespace PRM.Application.UseCases.AI
         private static IEnumerable<EmployeeAiContext> FilterCandidates(
             IEnumerable<EmployeeAiContext> employees, int? partTimeHoursPerWeek)
         {
+            // Exclude fully booked employees before any AI call
+            var available = employees.Where(e => e.FreeCapacityPercent > 0);
+
             if (partTimeHoursPerWeek.HasValue)
             {
-                // Part-time: need at least enough free hours for the requested commitment
-                // Convert requested hours to approximate % (based on 40hr week)
-                var neededPercent = (int)Math.Ceiling(partTimeHoursPerWeek.Value / 40.0 * 100);
-                return employees.Where(e => e.FreeCapacityPercent >= neededPercent);
+                return available.Where(e => e.FreeHoursPerWeek >= partTimeHoursPerWeek.Value);
             }
 
-            // Full-time / open-ended: exclude anyone with less than MinFreePercentForFullTime
-            return employees.Where(e => e.FreeCapacityPercent >= MinFreePercentForFullTime);
+            // Full-time / open-ended: need meaningful free capacity (excludes near-full staff)
+            return available.Where(e => e.FreeCapacityPercent >= MinFreePercentForFullTime);
         }
 
         private static List<AiRankResult>? ParseAiResponse(string raw)

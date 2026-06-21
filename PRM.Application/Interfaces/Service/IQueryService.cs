@@ -105,8 +105,9 @@ namespace PRM.Application.Interfaces.Service
         Task<MyAllocationsResponse> GetMyAllocationsAsync(
             int employeeId, CancellationToken ct = default);
 
-        // ── Phase 5 — AI context builders (stubbed here, implemented in Phase 5) ─
-        Task<IEnumerable<EmployeeAiContext>> GetEmployeesForSkillMatchAsync(CancellationToken ct = default);
+        // ── Phase 5 — AI context builders ─────────────────────────
+        Task<IEnumerable<EmployeeAiContext>> GetEmployeesForSkillMatchAsync(
+            int managerEmployeeId, CancellationToken ct = default);
 
         /// <summary>Organisation-wide employees currently on bench — for team staffing AI.</summary>
         Task<IEnumerable<BenchEmployeeAiContext>> GetBenchEmployeesForTeamStaffingAsync(CancellationToken ct = default);
@@ -151,6 +152,7 @@ namespace PRM.Application.Interfaces.Service
         string Department,
         string Designation,
         int FreeCapacityPercent,
+        int FreeHoursPerWeek,
         IEnumerable<string> ProfileSkills,
         IEnumerable<string> RecentActivityTags
     );

@@ -616,10 +616,16 @@ namespace PRM.Infrastructure.ExternalService
 
         //// ── Phase 5 stub ──────────────────────────────────────────
 
-        public async Task<IEnumerable<EmployeeAiContext>> GetEmployeesForSkillMatchAsync(CancellationToken ct = default)
+        public async Task<IEnumerable<EmployeeAiContext>> GetEmployeesForSkillMatchAsync(
+            int managerEmployeeId, CancellationToken ct = default)
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var fourWeeksAgo = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-28));
+            var maxWeeklyHours = await context.SystemConfigurations
+                .Select(c => c.MaxWeeklyHours)
+                .FirstOrDefaultAsync(ct);
+            if (maxWeeklyHours <= 0)
+                maxWeeklyHours = 40;
 
             var employees = await context.Employees
                 .Include(e => e.User)
@@ -627,12 +633,16 @@ namespace PRM.Infrastructure.ExternalService
                 .Include(e => e.Allocations.Where(a => a.FromDate <= today && a.ToDate >= today))
                 .Include(e => e.Timesheets.Where(t => t.WeekStartDate >= fourWeeksAgo))
                     .ThenInclude(t => t.Entries)
-                .Where(e => e.User.IsActive)
+                .Where(e => e.User.IsActive
+                         && e.User.Role == UserRole.Employee
+                         && e.ManagerId == managerEmployeeId
+                         && e.Id != managerEmployeeId)
                 .ToListAsync(ct);
 
             return employees.Select(e =>
             {
                 var totalUtil = e.Allocations.Sum(a => a.UtilisationPercentage);
+                var freePercent = Math.Max(0, 100 - totalUtil);
                 var recentTags = e.Timesheets
                     .SelectMany(t => t.Entries)
                     .Where(en => !string.IsNullOrEmpty(en.ActivityTags))
@@ -643,7 +653,8 @@ namespace PRM.Infrastructure.ExternalService
 
                 return new EmployeeAiContext(
                     e.Id, e.User.FullName, e.User.Department, e.User.Designation,
-                    Math.Max(0, 100 - totalUtil),
+                    freePercent,
+                    freePercent * maxWeeklyHours / 100,
                     e.Skills.Select(s => s.SkillName).ToList(),
                     recentTags
                 );

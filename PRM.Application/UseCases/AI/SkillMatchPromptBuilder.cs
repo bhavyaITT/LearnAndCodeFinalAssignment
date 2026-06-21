@@ -53,7 +53,7 @@ namespace PRM.Infrastructure.AI.Prompts
               ID: {e.EmployeeId}
               Name: {e.FullName}
               Department: {e.Department} | Designation: {e.Designation}
-              Free Capacity: {e.FreeCapacityPercent}%
+              Free Capacity: {e.FreeCapacityPercent}% ({e.FreeHoursPerWeek} hrs/week free)
               Profile Skills: {(e.ProfileSkills.Any() ? string.Join(", ", e.ProfileSkills) : "None listed")}
               Recent Work Tags: {(e.RecentActivityTags.Any() ? string.Join(", ", e.RecentActivityTags) : "No recent timesheet data")}
             """);

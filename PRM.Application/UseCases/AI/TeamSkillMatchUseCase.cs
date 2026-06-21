@@ -221,24 +221,178 @@ public class TeamSkillMatchUseCase(IQueryService queryService, ILlmClientFactory
     {
         try
         {
-            var cleaned = raw
-                .Replace("```json", string.Empty, StringComparison.OrdinalIgnoreCase)
-                .Replace("```", string.Empty)
-                .Trim();
+            var cleaned = ExtractJsonObject(CleanLlmText(raw));
+            if (string.IsNullOrWhiteSpace(cleaned))
+                return null;
 
-            var start = cleaned.IndexOf('{');
-            var end = cleaned.LastIndexOf('}');
-            if (start >= 0 && end > start)
-                cleaned = cleaned[start..(end + 1)];
-
-            return JsonSerializer.Deserialize<AiTeamResult>(
+            using var doc = JsonDocument.Parse(
                 cleaned,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                new JsonDocumentOptions { AllowTrailingCommas = true });
+
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var root = doc.RootElement;
+            var result = new AiTeamResult();
+
+            if (TryGetProperty(root, "matches", out var matchesEl)
+                && matchesEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in matchesEl.EnumerateArray())
+                {
+                    var employeeId = ReadInt(item, "employeeId", "employee_id");
+                    if (employeeId <= 0)
+                        continue;
+
+                    result.Matches.Add(new AiMatch
+                    {
+                        RoleTitle = ReadString(item, "roleTitle", "role_title") ?? string.Empty,
+                        EmployeeId = employeeId,
+                        Reason = ReadString(item, "reason") ?? string.Empty
+                    });
+                }
+            }
+
+            if (TryGetProperty(root, "gaps", out var gapsEl)
+                && gapsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in gapsEl.EnumerateArray())
+                {
+                    result.Gaps.Add(new AiGap
+                    {
+                        RoleTitle = ReadString(item, "roleTitle", "role_title") ?? string.Empty,
+                        GapType = NormalizeGapType(ReadString(item, "gapType", "gap_type")),
+                        Reason = ReadString(item, "reason") ?? string.Empty,
+                        AllocatedEmployeeId = ReadNullableInt(
+                            item, "allocatedEmployeeId", "allocated_employee_id"),
+                        AllocatedEmployeeName = ReadString(
+                            item, "allocatedEmployeeName", "allocated_employee_name")
+                    });
+                }
+            }
+
+            return result.Matches.Count == 0 && result.Gaps.Count == 0 ? null : result;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static string CleanLlmText(string raw) =>
+        raw
+            .Replace("```json", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("```", string.Empty)
+            .Trim();
+
+    private static string ExtractJsonObject(string text)
+    {
+        var start = text.IndexOf('{');
+        if (start < 0)
+            return text.Trim();
+
+        var depth = 0;
+        for (var i = start; i < text.Length; i++)
+        {
+            if (text[i] == '{')
+                depth++;
+            else if (text[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return text[start..(i + 1)];
+            }
+        }
+
+        return text[start..].Trim();
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.TryGetProperty(name, out value))
+            return true;
+
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (prop.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string? ReadString(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!TryGetProperty(element, name, out var value))
+                continue;
+
+            return value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString(),
+                JsonValueKind.Number => value.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => null
+            };
+        }
+
+        return null;
+    }
+
+    private static int ReadInt(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!TryGetProperty(element, name, out var value))
+                continue;
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+                return number;
+
+            if (value.ValueKind == JsonValueKind.String
+                && int.TryParse(value.GetString(), out number))
+                return number;
+        }
+
+        return 0;
+    }
+
+    private static int? ReadNullableInt(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!TryGetProperty(element, name, out var value))
+                continue;
+
+            if (value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                return null;
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+                return number;
+
+            if (value.ValueKind == JsonValueKind.String
+                && int.TryParse(value.GetString(), out number))
+                return number;
+        }
+
+        return null;
+    }
+
+    private static string NormalizeGapType(string? gapType)
+    {
+        if (string.IsNullOrWhiteSpace(gapType))
+            return "SkillGap";
+
+        if (gapType.Contains("Availability", StringComparison.OrdinalIgnoreCase))
+            return "AvailabilityGap";
+
+        return "SkillGap";
     }
 
     private sealed class AiTeamResult
