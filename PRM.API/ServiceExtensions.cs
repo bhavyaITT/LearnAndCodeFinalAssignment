@@ -131,7 +131,6 @@ namespace PRM.API
             services.AddScoped<UtilisationRecomputeJob>();
             services.AddScoped<ProjectHealthFlaggingJob>();
             services.AddScoped<TimesheetComplianceJob>();
-            services.AddScoped<MissedTimesheetDetectionJob>();
             services.AddScoped<ISchedulerService, HangfireSchedulerService>();
 
             return services;

@@ -56,13 +56,12 @@ namespace PRM.Infrastructure.Persistence
                 Username = "admin",
                 Email = "admin@intimetec.com",
                 FullName = "System Administrator",
-                // BCrypt hash of "Admin@1234"
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@1234", 12),
                 Role = UserRole.Admin,
                 IsActive = true,
                 Department = "Administration",
                 Designation = "System Admin",
-                ForcePasswordChange = true,  // Must change on first login
+                ForcePasswordChange = true,  
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -79,7 +78,7 @@ namespace PRM.Infrastructure.Persistence
 
             context.SystemConfigurations.Add(new SystemConfiguration
             {
-                LlmProvider = "Gemini",
+                LlmProvider = "InHouse",
                 LlmApiKey = "",
                 SchedulerIntervalHours = 4,
                 MaxWeeklyHours = 40,

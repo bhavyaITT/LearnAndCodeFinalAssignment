@@ -69,14 +69,6 @@ namespace PRM.Application.UseCases.Users
 
                 await unitOfWork.Users.AddAsync(user, ct);
                 await unitOfWork.SaveChangesAsync(ct);
-                //var employee = new Employee
-                //{
-                //    Id = user.Id,  // ✅ NOW VALID: Use the User's auto-generated Id
-                //    Status = EmployeeStatus.Bench,
-                //    ManagerId = UserId
-                //};
-                //await unitOfWork.Employees.AddAsync(employee, ct);
-                //await unitOfWork.SaveChangesAsync(ct);
                 return Result<UserSummaryResponse>.Success(MapToResponse(user));
             }
             catch (Exception ex)

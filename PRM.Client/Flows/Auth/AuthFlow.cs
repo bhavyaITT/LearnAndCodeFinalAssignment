@@ -1,7 +1,7 @@
 using PRM.Client.Services;
 using PRM.Client.UI;
 
-namespace PRM.Client.Flows;
+namespace PRM.Client.Flows.Auth;
 
 public sealed class AuthFlow(PrmApiClient api, UserSession session)
 {

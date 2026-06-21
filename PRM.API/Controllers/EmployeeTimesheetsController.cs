@@ -157,16 +157,4 @@ namespace PRM.API.Controllers
             return today.AddDays(-daysFromMonday);
         }
     }
-    // Add this helper extension method to extract the user ID from ClaimsPrincipal
-    //public static class ClaimsPrincipalExtensions
-    //{
-    //    public static int? GetUserId(this ClaimsPrincipal user)
-    //    {
-    //        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier) ?? user.FindFirst("sub");
-    //        if (userIdClaim == null) return null;
-    //        if (int.TryParse(userIdClaim.Value, out var id))
-    //            return id;
-    //        return null;
-    //    }
-    //}
 }

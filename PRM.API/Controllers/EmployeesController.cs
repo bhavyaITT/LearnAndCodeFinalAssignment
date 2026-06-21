@@ -22,16 +22,6 @@ namespace PRM.API.Controllers
     RemoveSkillUseCase removeSkill,
     AssignManagerUseCase assignManager) : ControllerBase
     {
-        ///// <summary>GET /api/employees?status=Bench&department=Backend</summary>
-        //[HttpGet]
-        //public async Task<IActionResult> GetAll(
-        //    [FromQuery] string? status,
-        //    [FromQuery] string? department,
-        //    CancellationToken ct)
-        //{
-        //    var result = await getAllEmployees.ExecuteAsync(status, department, ct);
-        //    return Ok(result.Data);
-        //}
 
         [HttpGet]
         public async Task<IActionResult> GetAll(CancellationToken ct)
@@ -51,18 +41,6 @@ namespace PRM.API.Controllers
 
             return Ok(result.Data);
         }
-
-        /// <summary>POST /api/employees</summary>
-        //[HttpPost]
-        //public async Task<IActionResult> Create([FromBody] CreateEmployeeRequest request, CancellationToken ct)
-        //{
-        //    var result = await createEmployee.ExecuteAsync(request, ct);
-
-        //    if (!result.IsSuccess)
-        //        return BadRequest(new { message = result.Error });
-
-        //    return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result.Data);
-        //}
 
         /// <summary>PUT /api/employees/{id}</summary>
         [HttpPut("{id:int}")]

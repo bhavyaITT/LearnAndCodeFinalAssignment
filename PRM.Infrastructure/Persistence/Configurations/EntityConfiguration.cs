@@ -12,16 +12,8 @@ namespace PRM.Infrastructure.Persistence.Configurations
 
             builder.Property(e => e.Id)
             .ValueGeneratedNever();
-            //builder.Property(e => e.FullName).IsRequired().HasMaxLength(200);
-            //builder.Property(e => e.Email).IsRequired().HasMaxLength(255);
-            //builder.Property(e => e.Department).IsRequired().HasMaxLength(100);
-            //builder.Property(e => e.Designation).IsRequired().HasMaxLength(100);
             builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
 
-            //builder.HasOne(e => e.User)
-            //    .WithOne(u => u.Employee)
-            //    .HasForeignKey<Employee>(e => e.UserId)
-            //    .OnDelete(DeleteBehavior.Restrict);  // Never cascade-delete users when employees are deleted
             builder.HasOne(e => e.User)
             .WithOne(u => u.Employee)
             .HasForeignKey<Employee>(e => e.Id)

@@ -9,7 +9,7 @@ namespace PRM.API.Controllers
 {
     [ApiController]
     [Route("api/users")]
-    [Authorize(Roles = "Admin")]   // All user management is Admin-only
+    [Authorize(Roles = "Admin")]  
     public class UsersController(
         CreateUserUseCase createUser,
         GetAllUsersUseCase getAllUsers,

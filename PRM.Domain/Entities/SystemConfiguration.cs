@@ -8,7 +8,7 @@ namespace PRM.Domain.Entities
 {
     public class SystemConfiguration : BaseEntity
     {
-        public string LlmProvider { get; set; } = "Gemini";
+        public string LlmProvider { get; set; } = "InHouse";
 
         /// <summary>Stored as plain text in dev. In production, use a secret manager.</summary>
         public string LlmApiKey { get; set; } = string.Empty;

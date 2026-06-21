@@ -1,10 +1,11 @@
 using PRM.Application.DTOs.Employee;
+using PRM.Client.Abstractions;
 using PRM.Client.Services;
 using PRM.Client.UI;
 
-namespace PRM.Client.Flows;
+namespace PRM.Client.Flows.Employee;
 
-public sealed class EmployeeFlow(PrmApiClient api, UserSession session)
+public sealed class EmployeeFlow(PrmApiClient api, UserSession session) : IRoleFlow
 {
     public async Task RunAsync(CancellationToken ct)
     {

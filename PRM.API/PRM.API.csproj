@@ -27,8 +27,4 @@
     <ProjectReference Include="..\PRM.Infrastructure\PRM.Infrastructure.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Middlewares\" />
-  </ItemGroup>
-
 </Project>

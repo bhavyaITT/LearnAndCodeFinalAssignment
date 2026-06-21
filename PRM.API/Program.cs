@@ -5,23 +5,10 @@ using PRM.Application.Interfaces.Service;
 using PRM.Application.Settings;
 using PRM.Infrastructure.AI;
 using PRM.Infrastructure.Persistence;
-using Hangfire.SqlServer; // Add this using if you use SQL Server storage for Hangfire
+using Hangfire.SqlServer; 
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Structured logging with Serilog
-//Log.Logger = new LoggerConfiguration()
-//    .ReadFrom.Configuration(builder.Configuration)
-//    .WriteTo.Console()
-//    .WriteTo.File("logs/prm-.log", rollingInterval: RollingInterval.Day)
-//    .CreateLogger();
-
-//builder.Host.UseSerilog((context, services, configuration) => configuration
-//        .ReadFrom.Configuration(context.Configuration)
-//        .ReadFrom.Services(services)
-//        .Enrich.FromLogContext());
-
 
 // ── Service Registration ──────────────────────────────────────
 builder.Services.AddDatabase(builder.Configuration);
@@ -31,7 +18,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddHangfireServices(builder.Configuration);
 builder.Services.Configure<LlmSettings>(builder.Configuration.GetSection(LlmSettings.SectionName));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection(EmailSettings.SectionName));
-builder.Services.AddHttpClient("LlmClient");   // Named HttpClient for LLM calls
+builder.Services.AddHttpClient("LlmClient");   
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -71,8 +58,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-//app.UseSerilogRequestLogging();
-// ── Database Migration + Seed ─────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<PRMTDbContext>();
