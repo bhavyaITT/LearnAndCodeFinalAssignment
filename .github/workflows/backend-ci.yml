@@ -1,0 +1,58 @@
+# The name that shows up in the GitHub "Actions" tab for every run of this workflow.
+name: Backend CI
+
+# ---------------------------------------------------------------------------
+# WHEN should this workflow run? (the triggers)
+# ---------------------------------------------------------------------------
+on:
+  # Run when commits are pushed to these branches.
+  push:
+    branches: [ "Dev", "main", "master" ]
+  # Also run on pull requests that TARGET these branches,
+  # so broken code is caught before it is merged.
+  pull_request:
+    branches: [ "Dev", "main", "master" ]
+  # Lets you trigger this workflow by hand from the Actions tab (a manual button).
+  workflow_dispatch:
+
+# ---------------------------------------------------------------------------
+# WHAT work should run. A workflow has one or more "jobs".
+# ---------------------------------------------------------------------------
+jobs:
+  build-and-test:
+    # The virtual machine GitHub spins up for us. ubuntu-latest is free,
+    # fast, and fine for building .NET 8. (GitHub provides the runner;
+    # this is the equivalent of a GitLab Runner.)
+    runs-on: ubuntu-latest
+
+    # A job is a sequence of ordered steps. Each step is either a prebuilt
+    # action (uses:) or a shell command (run:). They run top to bottom;
+    # if any step fails (non-zero exit), the job stops and goes red.
+    steps:
+      # Step 1: Pull your repository's code onto the runner.
+      # Without this, the VM is empty. "actions/checkout" is GitHub's
+      # official, prebuilt action for this.
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # Step 2: Install the .NET 8 SDK on the runner so dotnet commands work.
+      # We pin 8.0.x because the whole solution targets net8.0.
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Step 3: Restore NuGet dependencies for the whole solution.
+      # Same command you ran locally.
+      - name: Restore dependencies
+        run: dotnet restore PRMT.sln
+
+      # Step 4: Compile in Release configuration.
+      # --no-restore skips a redundant restore since step 3 already did it.
+      - name: Build (Release)
+        run: dotnet build PRMT.sln -c Release --no-restore
+
+      # Step 5: Run the xUnit tests. --no-build reuses step 4's output.
+      # If even one test fails, this step exits non-zero and the run goes red.
+      - name: Run tests
+        run: dotnet test PRMT.sln -c Release --no-build --verbosity normal
