@@ -56,3 +56,69 @@ jobs:
       # If even one test fails, this step exits non-zero and the run goes red.
       - name: Run tests
         run: dotnet test PRMT.sln -c Release --no-build --verbosity normal
+
+  # ===========================================================================
+  # JOB 2: Build the Docker image and push it to GHCR.
+  # This automates the manual `docker build / tag / login / push` you did.
+  # ===========================================================================
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    # Only run this job AFTER build-and-test succeeds. If tests fail,
+    # we never publish a broken image.
+    needs: build-and-test
+
+    # Only publish on a real push to a branch — NOT on pull requests.
+    # (PRs still get built-and-tested above; they just don't publish images.)
+    if: github.event_name == 'push'
+
+    # Grant THIS run's built-in GITHUB_TOKEN the rights it needs:
+    #  - contents: read  -> to check out the code
+    #  - packages: write -> to push the image to GHCR
+    # This replaces the personal access token + SSO you used manually.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Pull the repo onto the runner (needed to access the Dockerfile + source).
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # Log the runner into GHCR using the automatic GITHUB_TOKEN.
+      # No PAT, no manual login — the token is created just for this run.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}        # the user/bot that triggered the run
+          password: ${{ secrets.GITHUB_TOKEN }} # auto-provided, short-lived token
+
+      # Auto-generate image tags and labels. This replaces manual `docker tag`.
+      # It produces, among others:
+      #   - `latest` on the default branch
+      #   - a tag matching the branch name
+      #   - a tag with the short git commit SHA (great for traceability)
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # IMPORTANT: GHCR requires a lowercase owner. Hardcoding the known
+          # lowercase path avoids case issues from ${{ github.repository_owner }}.
+          images: ghcr.io/bhavyaitt/prmtool-api
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=sha,format=short
+
+      # Build from our Dockerfile and push to GHCR in one step.
+      # `context: .` = repo root (where the Dockerfile is).
+      # `tags`/`labels` come from the metadata step above.
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

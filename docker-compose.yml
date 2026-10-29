@@ -1,0 +1,62 @@
+# Docker Compose defines and runs a MULTI-container app with one file.
+# Here we run two services: a SQL Server database (db) and our API (api).
+# `docker compose up` starts both on a shared private network.
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # SERVICE 1: the database — Microsoft's official SQL Server 2022 (Linux).
+  # ---------------------------------------------------------------------------
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: prm-db
+    environment:
+      # Accept the SQL Server license (required) and set edition + sa password.
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"            # free Developer edition
+      # Password pulled from the .env file (not hardcoded here).
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      # Expose SQL Server to YOUR machine on 1433 (optional, handy for a DB tool).
+      - "1433:1433"
+    volumes:
+      # Named volume = the database files survive even if the container is removed.
+      - prm-sql-data:/var/opt/mssql
+    healthcheck:
+      # Compose uses this to know when SQL Server is actually ready for connections.
+      # It runs a tiny query; only when it succeeds is the db considered "healthy".
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -No -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # SERVICE 2: the API — built from our Dockerfile.
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .               # build using the Dockerfile in this folder
+      dockerfile: Dockerfile
+    container_name: prm-api
+    ports:
+      # host 8080 -> container 8080 (where Kestrel listens, per ASPNETCORE_URLS)
+      - "8080:8080"
+    environment:
+      # Show Swagger UI (Program.cs enables it only in Development).
+      ASPNETCORE_ENVIRONMENT: "Development"
+      # THE KEY LINE: override the connection string at runtime.
+      # `__` (double underscore) maps to the nested config key
+      # ConnectionStrings:DefaultConnection, replacing the (localdb) value.
+      # `db` is the service name above — Compose's DNS resolves it to the
+      # database container's IP on the shared network.
+      ConnectionStrings__DefaultConnection: "Server=db,1433;Database=PRMTDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=False;"
+    depends_on:
+      db:
+        # Don't start the API until the db healthcheck passes. This prevents
+        # the API from trying to migrate before SQL Server is accepting logins.
+        condition: service_healthy
+
+# Declares the named volume used by the db service above.
+volumes:
+  prm-sql-data:
