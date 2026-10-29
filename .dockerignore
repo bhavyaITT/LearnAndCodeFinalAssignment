@@ -1,0 +1,29 @@
+# Keep the Docker build context small and clean.
+# These are either rebuilt inside the image or irrelevant to it.
+
+# Build outputs (the image does its own build)
+**/bin/
+**/obj/
+**/publish/
+publish-demo/
+
+# Git and IDE metadata
+.git/
+.github/
+.vs/
+**/*.user
+
+# Local secrets and dev-only config (never bake into an image)
+**/appsettings.Development.json
+**/appsettings.*.local.json
+.env
+.env.*
+
+# Logs and test output
+**/Logs/
+*.log
+TestResults/
+
+# Docker files themselves
+Dockerfile
+.dockerignore

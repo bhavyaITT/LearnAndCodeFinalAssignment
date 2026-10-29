@@ -1,0 +1,124 @@
+# The name that shows up in the GitHub "Actions" tab for every run of this workflow.
+name: Backend CI
+
+# ---------------------------------------------------------------------------
+# WHEN should this workflow run? (the triggers)
+# ---------------------------------------------------------------------------
+on:
+  # Run when commits are pushed to these branches.
+  push:
+    branches: [ "Dev", "main", "master" ]
+  # Also run on pull requests that TARGET these branches,
+  # so broken code is caught before it is merged.
+  pull_request:
+    branches: [ "Dev", "main", "master" ]
+  # Lets you trigger this workflow by hand from the Actions tab (a manual button).
+  workflow_dispatch:
+
+# ---------------------------------------------------------------------------
+# WHAT work should run. A workflow has one or more "jobs".
+# ---------------------------------------------------------------------------
+jobs:
+  build-and-test:
+    # The virtual machine GitHub spins up for us. ubuntu-latest is free,
+    # fast, and fine for building .NET 8. (GitHub provides the runner;
+    # this is the equivalent of a GitLab Runner.)
+    runs-on: ubuntu-latest
+
+    # A job is a sequence of ordered steps. Each step is either a prebuilt
+    # action (uses:) or a shell command (run:). They run top to bottom;
+    # if any step fails (non-zero exit), the job stops and goes red.
+    steps:
+      # Step 1: Pull your repository's code onto the runner.
+      # Without this, the VM is empty. "actions/checkout" is GitHub's
+      # official, prebuilt action for this.
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # Step 2: Install the .NET 8 SDK on the runner so dotnet commands work.
+      # We pin 8.0.x because the whole solution targets net8.0.
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Step 3: Restore NuGet dependencies for the whole solution.
+      # Same command you ran locally.
+      - name: Restore dependencies
+        run: dotnet restore PRMT.sln
+
+      # Step 4: Compile in Release configuration.
+      # --no-restore skips a redundant restore since step 3 already did it.
+      - name: Build (Release)
+        run: dotnet build PRMT.sln -c Release --no-restore
+
+      # Step 5: Run the xUnit tests. --no-build reuses step 4's output.
+      # If even one test fails, this step exits non-zero and the run goes red.
+      - name: Run tests
+        run: dotnet test PRMT.sln -c Release --no-build --verbosity normal
+
+  # ===========================================================================
+  # JOB 2: Build the Docker image and push it to GHCR.
+  # This automates the manual `docker build / tag / login / push` you did.
+  # ===========================================================================
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    # Only run this job AFTER build-and-test succeeds. If tests fail,
+    # we never publish a broken image.
+    needs: build-and-test
+
+    # Only publish on a real push to a branch — NOT on pull requests.
+    # (PRs still get built-and-tested above; they just don't publish images.)
+    if: github.event_name == 'push'
+
+    # Grant THIS run's built-in GITHUB_TOKEN the rights it needs:
+    #  - contents: read  -> to check out the code
+    #  - packages: write -> to push the image to GHCR
+    # This replaces the personal access token + SSO you used manually.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Pull the repo onto the runner (needed to access the Dockerfile + source).
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # Log the runner into GHCR using the automatic GITHUB_TOKEN.
+      # No PAT, no manual login — the token is created just for this run.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}        # the user/bot that triggered the run
+          password: ${{ secrets.GITHUB_TOKEN }} # auto-provided, short-lived token
+
+      # Auto-generate image tags and labels. This replaces manual `docker tag`.
+      # It produces, among others:
+      #   - `latest` on the default branch
+      #   - a tag matching the branch name
+      #   - a tag with the short git commit SHA (great for traceability)
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # IMPORTANT: GHCR requires a lowercase owner. Hardcoding the known
+          # lowercase path avoids case issues from ${{ github.repository_owner }}.
+          images: ghcr.io/bhavyaitt/prmtool-api
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=sha,format=short
+
+      # Build from our Dockerfile and push to GHCR in one step.
+      # `context: .` = repo root (where the Dockerfile is).
+      # `tags`/`labels` come from the metadata step above.
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

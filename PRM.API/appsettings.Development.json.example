@@ -1,0 +1,19 @@
+{
+  "LlmSettings": {
+    "InHouse": {
+      "ApiKey": "YOUR_IN_HOUSE_LLM_KEY_HERE"
+    }
+  },
+  "EmailSettings": {
+    "Enabled": true,
+    "GmailAddress": "your_email@gmail.com",
+    "AppPassword": "xxxx xxxx xxxx xxxx",
+    "FromName": "PRM System",
+    "SmtpHost": "smtp.gmail.com",
+    "SmtpPort": 587,
+    "SmtpUseStartTls": true,
+    "EnableInboxVerification": true,
+    "ImapHost": "imap.gmail.com",
+    "ImapPort": 993
+  }
+}

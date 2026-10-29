@@ -1,0 +1,30 @@
+.vs/
+bin/
+obj/
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
+# Publish output (deployable bundles produced by `dotnet publish`)
+publish/
+publish-demo/
+**/publish/
+
+# Secrets & environment files - never commit real secrets to a public repo
+.env
+.env.*
+!.env.example
+**/appsettings.Production.json
+**/appsettings.Local.json
+**/*.secrets.json
+secrets.json
+
+# Certificates / keys
+*.pfx
+*.p12
+*.key
+*.pem
+
+# Runtime logs (this project writes to Logs/ via Serilog)
+Logs/
+**/Logs/
+*.log
